@@ -3,10 +3,13 @@ const bodyParser = require('body-parser')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const uniqid = require('uniqid')
+const config = require('config')
+
+const sendEmail = require('./email')
 
 const db = require('./db')
 
-const JWT_KEY = 'supersecretkey'
+const JWT_KEY = config.get('jwt.secret')
 
 const app = express()
 
@@ -24,7 +27,7 @@ app.post('/register', async function(req, res) {
       const token = await jwt.sign({ userId }, JWT_KEY)
 
       db.users.push({
-        id: uniqid(),
+        id: userId,
         email,
         password: hash
       })
@@ -61,6 +64,24 @@ app.post('/login', async function(req, res) {
   }
 })
 
-// app.post('/createOrder', async function(req, res) {})
+app.post('/createOrder', async function(req, res) {
+  const token = req.headers.authorization ? req.headers.authorization.replace('Bearer ', '') : null
+  if (token) {
+    try {
+      const { userId } = await jwt.verify(token, JWT_KEY)
+      const user = db.users.find(user => user.id === userId)
+      if (user) {
+        const sendStatus = await sendEmail(user, req.body)
+        res.send(sendStatus)
+      } else {
+        res.send(401)
+      }
+    } catch (err) {
+      res.send(401)
+    }
+  } else {
+    res.send(401)
+  }
+})
 
 app.listen(3000)
